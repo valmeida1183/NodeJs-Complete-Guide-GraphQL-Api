@@ -1,18 +1,14 @@
 const express = require('express');
-const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const multer = require('multer'); // to file uploads
 const path = require('path');
+const { graphqlHTTP } = require('express-graphql');
 
 const mongoDbConnect = require('./db/mongoDbConnect');
 const { fileStorage, fileFilter } = require('./middlewares/fileStorage.middleware');
-
-const socketHelper = require('./utils/socket.helper');
-
-// Routes
-const authRoutes = require('./routes/auth.route');
-const feedRoutes = require('./routes/feed.route');
-const userRoutes = require('./routes/user.route');
+const graphqlSchema = require('./graphql/schema');
+const graphqlResolvers = require('./graphql/resolvers');
+const authMiddleware = require('./middlewares/auth.middleware');
 
 const app = express();
 
@@ -24,6 +20,9 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE');
     // Set allowed headers
     res.setHeader('Access-Control-Allow-Headers', 'Content-type, Authorization');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
     next();
 });
 
@@ -33,10 +32,26 @@ app.use(express.json());
 app.use(multer({ storage: fileStorage, fileFilter: fileFilter }).single('image'));
 // Configure to serve static files inside 'images' folder
 app.use('/images', express.static(path.join(__dirname, 'images')));
-
-app.use('/feed', feedRoutes);
-app.use('/auth', authRoutes);
-app.use('/user', userRoutes);
+//Configure authentication middleware
+app.use(authMiddleware);
+//GraphQl Configuration
+app.use(
+    '/graphql',
+    graphqlHTTP({
+        schema: graphqlSchema,
+        rootValue: graphqlResolvers,
+        graphiql: true,
+        customFormatErrorFn(error) {
+            if (!error.originalError) {
+                return error;
+            }
+            const data = error.originalError.data;
+            const message = error.message || 'An error ocurred!';
+            const code = error.originalError.code;
+            return { message, code, data };
+        },
+    })
+);
 
 //Global error handling
 app.use((error, req, res, next) => {
@@ -48,13 +63,7 @@ app.use((error, req, res, next) => {
 mongoose
     .connect(mongoDbConnect.dbUrl, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => {
-        const server = app.listen(8000);
-        const io = socketHelper.init(server);
-
-        io.on('connection', socket => {
-            console.log('\x1b[34m', '--------- Client is Connected!!! ---------');
-            console.log('\x1b[0m');
-        });
+        app.listen(8000);
         console.log(
             '\x1b[32m', // set green color
             '--------- Application is Running!!! ---------'

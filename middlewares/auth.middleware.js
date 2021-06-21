@@ -4,7 +4,8 @@ const errorHelper = require('../utils/error.helper');
 module.exports = (req, res, next) => {
     const authHeader = req.get('Authorization');
     if (!authHeader) {
-        errorHelper.throwError('Authorization header is not provided', 401);
+        req.isAuth = false;
+        return next();
     }
 
     const token = authHeader.split(' ')[1]; // ignores the word  'Bearer' that comes with token.
@@ -13,13 +14,16 @@ module.exports = (req, res, next) => {
     try {
         decodedToken = jwt.verify(token, process.env.JWT_API_SECRET);
     } catch (err) {
-        errorHelper.throwError('The token providades is invalid');
+        req.isAuth = false;
+        return next();
     }
 
     if (!decodedToken) {
-        errorHelper.throwError('Not authenticated.', 401);
+        req.isAuth = false;
+        return next();
     }
 
     req.userId = decodedToken.userId;
+    req.isAuth = true;
     next();
 };

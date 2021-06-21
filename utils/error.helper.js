@@ -5,9 +5,9 @@ exports.handleError = (error, next, errorCode = 500) => {
     next(error);
 };
 
-exports.throwError = (message, errorCode = 400, errorsArray = []) => {
+exports.throwError = (message, errorCode = 500, errorsArray = []) => {
     const error = new Error(message);
-    error.statusCode = errorCode;
+    error.code = errorCode;
 
     if (errorsArray.length > 0) {
         error.data = errorsArray;
