@@ -45,11 +45,13 @@ const schema = buildSchema(`
     type RootMutation {
         signUp(userInput: UserInputData): User!
         createPost(postInput: PostInputData): Post!
+        updatePost(id: ID!, postInput: PostInputData): Post!
     }
 
     type RootQuery {
         signIn(email: String!, password: String!): AuthData!
-        getPosts: PostData!
+        getPosts(page: Int): PostData!
+        getPost(id: ID!): Post!
     }
 
     schema {

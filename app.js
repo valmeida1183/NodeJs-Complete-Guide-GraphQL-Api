@@ -10,6 +10,8 @@ const graphqlSchema = require('./graphql/schema');
 const graphqlResolvers = require('./graphql/resolvers');
 const authMiddleware = require('./middlewares/auth.middleware');
 
+const fileHelper = require('./utils/file.helper');
+
 const app = express();
 
 //Set CORS configuration to any client
@@ -34,7 +36,23 @@ app.use(multer({ storage: fileStorage, fileFilter: fileFilter }).single('image')
 app.use('/images', express.static(path.join(__dirname, 'images')));
 //Configure authentication middleware
 app.use(authMiddleware);
+
+app.put('/post-image', (req, res, next) => {
+    if (!req.isAuth) {
+        throw new Error('Not Authenticated!');
+    }
+    if (!req.file) {
+        return res.status(200).json({ message: 'No file provided!' });
+    }
+    if (req.body.oldPath) {
+        fileHelper.deleteFile(req.body.oldPath);
+    }
+
+    return res.status(201).json({ message: 'File stored!', filePath: req.file.path.replace('\\', '/') });
+});
+
 //GraphQl Configuration
+
 app.use(
     '/graphql',
     graphqlHTTP({

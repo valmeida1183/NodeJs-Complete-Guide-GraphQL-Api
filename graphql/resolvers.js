@@ -75,12 +75,23 @@ const signIn = async (args, req) => {
 };
 
 const getPosts = async (args, req) => {
+    let { page } = args;
+
     if (!req.isAuth) {
         errorHelper.throwError('Not Authenticated!', 401);
     }
 
+    if (!page) {
+        page = 1;
+    }
+
+    const perPage = 2;
     const totalPosts = await Post.countDocuments();
-    const posts = await Post.find().sort({ createdAt: -1 }).populate('creator');
+    const posts = await Post.find()
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * perPage)
+        .limit(perPage)
+        .populate('creator');
 
     return {
         posts: posts.map(p => {
@@ -93,6 +104,21 @@ const getPosts = async (args, req) => {
         }),
         totalPosts,
     };
+};
+
+const getPost = async ({ id }, req) => {
+    if (!req.isAuth) {
+        errorHelper.throwError('Not Authenticated!', 401);
+    }
+
+    const post = await Post.findById(id).populate('creator');
+    if (!post) {
+        errorHelper.throwError('Post not Found!', 404);
+    }
+
+    const postMapped = mongooseModelHelper.mapModelToRawObject(post);
+    postMapped.imageUrl = postMapped.imageUrl.replace(/\\/g, '/');
+    return postMapped;
 };
 
 const createPost = async ({ postInput }, req) => {
@@ -135,17 +161,58 @@ const createPost = async ({ postInput }, req) => {
     user.posts.push(createdPost);
     await user.save();
 
-    return {
-        ...createdPost._doc,
-        _id: createdPost._id.toString(),
-        createdAt: createdPost.createdAt.toISOString(),
-        updatedAt: createdPost.updatedAt.toISOString(),
-    };
+    return mongooseModelHelper.mapModelToRawObject(createdPost);
+};
+
+const updatePost = async ({ id, postInput }, req) => {
+    if (!req.isAuth) {
+        errorHelper.throwError('Not Authenticated!', 401);
+    }
+
+    const post = await Post.findById(id).populate('creator');
+    if (!post) {
+        errorHelper.throwError('Post not Found!', 404);
+    }
+
+    if (post.creator._id.toString() !== req.userId.toString()) {
+        errorHelper.throwError('Not authorized to edit this post!', 403);
+    }
+
+    const { title, content, imageUrl } = postInput;
+
+    const errors = [];
+    if (validator.isEmpty(title)) {
+        errors.push({ message: 'Title is required' });
+    } else if (!validator.isLength(title, { min: 5 })) {
+        errors.push({ message: 'Title has to be 5 or more caracters' });
+    }
+
+    if (validator.isEmpty(content)) {
+        errors.push({ message: 'Content is required' });
+    } else if (!validator.isLength(content, { min: 5 })) {
+        errors.push({ message: 'Content has to be 5 or more caracters' });
+    }
+
+    if (errors.length > 0) {
+        errorHelper.throwError('Invalid inputs', 422, errors);
+    }
+
+    post.title = title;
+    post.content = content;
+    if (imageUrl !== 'undefined') {
+        post.imageUrl = imageUrl;
+    }
+
+    const updatedPost = await post.save();
+
+    return mongooseModelHelper.mapModelToRawObject(updatedPost);
 };
 
 module.exports = {
     signUp,
     signIn,
     getPosts,
+    getPost,
     createPost,
+    updatePost,
 };
