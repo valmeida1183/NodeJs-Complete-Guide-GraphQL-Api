@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const Post = require('../models/post');
 const User = require('../models/user');
 const errorHelper = require('../utils/error.helper');
+const fileHelper = require('../utils/file.helper');
 const mongooseModelHelper = require('../utils/mongooseModel.helper');
 
 const signUp = async (args, req) => {
@@ -208,6 +209,70 @@ const updatePost = async ({ id, postInput }, req) => {
     return mongooseModelHelper.mapModelToRawObject(updatedPost);
 };
 
+const deletePost = async ({ id }, req) => {
+    if (!req.isAuth) {
+        errorHelper.throwError('Not Authenticated!', 401);
+    }
+
+    //Observe that in this example we do not call 'populate' with 'creator' flag, and then creator inside post object is a ObjectId
+    const post = await Post.findById(id);
+    if (!post) {
+        errorHelper.throwError('Post not Found!', 404);
+    }
+
+    if (post.creator.toString() !== req.userId.toString()) {
+        errorHelper.throwError('Not authorized to delete this post!', 403);
+    }
+
+    fileHelper.deleteFile(post.imageUrl);
+
+    await Post.findByIdAndRemove(id);
+
+    const user = await User.findById(req.userId);
+    user.posts.pull(id);
+    await user.save();
+
+    return true;
+};
+
+const getCurrentUser = async (args, req) => {
+    if (!req.isAuth) {
+        errorHelper.throwError('Not Authenticated!', 401);
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+        errorHelper.throwError('User not Found!', 404);
+    }
+
+    return { ...user._doc, _id: user._id.toString() };
+};
+
+const updateUserStatus = async ({ status }, req) => {
+    if (!req.isAuth) {
+        errorHelper.throwError('Not Authenticated!', 401);
+    }
+
+    const errors = [];
+    if (validator.isEmpty(status)) {
+        errors.push({ message: 'Status is required' });
+    }
+
+    if (errors.length > 0) {
+        errorHelper.throwError('Invalid inputs', 422, errors);
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+        errorHelper.throwError('User not Found!', 404);
+    }
+
+    user.status = status;
+    const updatedUser = await user.save();
+
+    return { ...updatedUser._doc, _id: updatedUser._id.toString() };
+};
+
 module.exports = {
     signUp,
     signIn,
@@ -215,4 +280,7 @@ module.exports = {
     getPost,
     createPost,
     updatePost,
+    deletePost,
+    getCurrentUser,
+    updateUserStatus,
 };
